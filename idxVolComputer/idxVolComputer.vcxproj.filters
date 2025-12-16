@@ -1,0 +1,192 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="main_features">
+      <UniqueIdentifier>{35835d56-c372-499b-a92e-a77c094e1c83}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ANN">
+      <UniqueIdentifier>{f73fe644-6309-4aa9-9e1a-93de0320e30e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ANN\include">
+      <UniqueIdentifier>{4c1b4435-4eac-4a1f-a91b-aadbb31b9dcf}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="PCPInselberg.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="outtlier_dettector\iqsort.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="outtlier_dettector\qsp.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="outtlier_dettector\readCSV.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="XPCPdataAnalyzer.cpp">
+      <Filter>main_features</Filter>
+    </ClCompile>
+    <ClCompile Include="PointMonteCarloSampler.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="VolumeData.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ParallelCoordinates.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ANN\src\ANN.cpp">
+      <Filter>ANN</Filter>
+    </ClCompile>
+    <ClCompile Include="ANN\src\bd_fix_rad_search.cpp">
+      <Filter>ANN</Filter>
+    </ClCompile>
+    <ClCompile Include="ANN\src\bd_pr_search.cpp">
+      <Filter>ANN</Filter>
+    </ClCompile>
+    <ClCompile Include="ANN\src\bd_search.cpp">
+      <Filter>ANN</Filter>
+    </ClCompile>
+    <ClCompile Include="ANN\src\bd_tree.cpp">
+      <Filter>ANN</Filter>
+    </ClCompile>
+    <ClCompile Include="ANN\src\brute.cpp">
+      <Filter>ANN</Filter>
+    </ClCompile>
+    <ClCompile Include="ANN\src\kd_dump.cpp">
+      <Filter>ANN</Filter>
+    </ClCompile>
+    <ClCompile Include="ANN\src\kd_fix_rad_search.cpp">
+      <Filter>ANN</Filter>
+    </ClCompile>
+    <ClCompile Include="ANN\src\kd_pr_search.cpp">
+      <Filter>ANN</Filter>
+    </ClCompile>
+    <ClCompile Include="ANN\src\kd_search.cpp">
+      <Filter>ANN</Filter>
+    </ClCompile>
+    <ClCompile Include="ANN\src\kd_split.cpp">
+      <Filter>ANN</Filter>
+    </ClCompile>
+    <ClCompile Include="ANN\src\kd_tree.cpp">
+      <Filter>ANN</Filter>
+    </ClCompile>
+    <ClCompile Include="ANN\src\kd_util.cpp">
+      <Filter>ANN</Filter>
+    </ClCompile>
+    <ClCompile Include="ANN\src\perf.cpp">
+      <Filter>ANN</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="UncertainXPCPSample.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="XPCPSample.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="global.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="MyVectors.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="MersenneTwister.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="pflatPt.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="KDtree.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="book.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="BSTNode.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="StdDefines.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="PCPInselberg.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="outtlier_dettector\iqsort.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="outtlier_dettector\qsp.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="outtlier_dettector\readCSV.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="outtlier_dettector\stdlib2.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="XPCPdataAnalyzer.h">
+      <Filter>main_features</Filter>
+    </ClInclude>
+    <ClInclude Include="PointMonteCarloSampler.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="VolumeData.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ParallelCoordinates.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ANN\src\bd_tree.h">
+      <Filter>ANN</Filter>
+    </ClInclude>
+    <ClInclude Include="ANN\src\kd_fix_rad_search.h">
+      <Filter>ANN</Filter>
+    </ClInclude>
+    <ClInclude Include="ANN\src\kd_pr_search.h">
+      <Filter>ANN</Filter>
+    </ClInclude>
+    <ClInclude Include="ANN\src\kd_search.h">
+      <Filter>ANN</Filter>
+    </ClInclude>
+    <ClInclude Include="ANN\src\kd_split.h">
+      <Filter>ANN</Filter>
+    </ClInclude>
+    <ClInclude Include="ANN\src\kd_tree.h">
+      <Filter>ANN</Filter>
+    </ClInclude>
+    <ClInclude Include="ANN\src\kd_util.h">
+      <Filter>ANN</Filter>
+    </ClInclude>
+    <ClInclude Include="ANN\src\pr_queue.h">
+      <Filter>ANN</Filter>
+    </ClInclude>
+    <ClInclude Include="ANN\src\pr_queue_k.h">
+      <Filter>ANN</Filter>
+    </ClInclude>
+    <ClInclude Include="ANN\include\ANN\ANN.h">
+      <Filter>ANN\include</Filter>
+    </ClInclude>
+    <ClInclude Include="ANN\include\ANN\ANNperf.h">
+      <Filter>ANN\include</Filter>
+    </ClInclude>
+    <ClInclude Include="ANN\include\ANN\ANNx.h">
+      <Filter>ANN\include</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
