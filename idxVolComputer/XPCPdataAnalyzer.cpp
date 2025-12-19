@@ -10,10 +10,11 @@
 #include "KDtree.h"
 #include "pflatPt.h"
 #include "UncertainXPCPSample.h"
-#include "./outlier_dettector/qsp.h"
-#include "./outlier_dettector/iqsort.h"
+#include "qsp.h"
+#include "iqsort.h"
 #include "VolumeData.h"
 #include "PointMonteCarloSampler.h"
+#include <QString>
 #include "SysTools.h"
 #include "progressBar.hpp"
 #define OUTPUT_FILE 0 //1
@@ -2029,571 +2030,571 @@ void XPCPdataAnalyzer::processRawData(const vector<vector<float>>& pointCenterDa
 	SAFE_DELETE_ARRAY(dists);
 }
 
-void XPCPdataAnalyzer::processUncertainRawData(const vector<GaussianXd>& distrPointData, int num_nearest_neighbors)
-{
-	// Create a certain point-based raw data by taking the center of distrPointData
-	vector<vector<float>> pointCenterData;
-
-	uncertain_getPointCenters(distrPointData, pointCenterData);
-	// Copy to g_sampledRaw
-	g_sampled_raw = pointCenterData;
-
-	if (_annKdTree_rawData == NULL)
-		buildKDTree(pointCenterData, &_annKdTree_rawData);
-	// use kdTree_rawData to find nearest neighbors to compute 1-flat & 2-flat
-	int k_0 = num_nearest_neighbors;
-	int dim_rawData = pointCenterData[0].size();
-	//Set dimensions of the data
-	_numSamples = UINT64(pointCenterData.size());
-	_dimRawData = dim_rawData; // Raw data dimension
-	_dimXPCPdata = dim_rawData + 2 * (dim_rawData - 1) + 2 * (dim_rawData - 2); // XPCP data dimension
-	// Do procssing
-	double eps = 0.0; // error bound
-	ANNpoint     queryPt; // query point
-	ANNidxArray  nnIdx;   // near neighbor indices
-	ANNdistArray dists;   // near neighbor distances   
-	queryPt = annAllocPt(dim_rawData);
-	nnIdx = new ANNidx[k_0];
-	dists = new ANNdist[k_0];
-	//Preperations: Clear list
-	g_xpcpData.resize(pointCenterData.size(), UncertainXPCPSample(dim_rawData, g_params.Uncertain_samples_per_distr()));
-	// build pcp if necessary
-	if (_pcp == NULL)
-	{
-		vector<string> attribs(dim_rawData);
-		for (size_t i = 0; i < attribs.size(); i++)
-			attribs[i] = string("attr_") + number2String(int(i));
-		_pcp = new PCPInselberg(attribs);
-	}
-
-	//// Create a temporary structure to build the KD-tree
-	//vector<vector<float>> vXpcpData(pointCenterData.size());
-	// Allocate space for Major eigen data
-	g_majEigData.resize(pointCenterData.size());
-	// use global variables to keep the p-flat records
-	g_1flat_list.clear();
-	g_2flat_list.clear();
-
-	// Prepare variables to record min/max of p-flat strength in each subspace
-	_1flatsMinMaxPerSubspace.clear();
-	_1flatsMinMaxPerSubspace.resize(dim_rawData - 1);
-	for (size_t i = 0; i < _1flatsMinMaxPerSubspace.size(); i++)
-	{
-		_1flatsMinMaxPerSubspace[i].x = numeric_limits<float>::max();
-		_1flatsMinMaxPerSubspace[i].y = -numeric_limits<float>::max();
-	}
-	_2flatsMinMaxPerSubspace.clear();
-	_2flatsMinMaxPerSubspace.resize(dim_rawData - 2);
-	for (size_t i = 0; i < _2flatsMinMaxPerSubspace.size(); i++)
-	{
-		_2flatsMinMaxPerSubspace[i].x = numeric_limits<float>::max();
-		_2flatsMinMaxPerSubspace[i].y = -numeric_limits<float>::max();
-	}
-	double r = 0.1;       // In a r-ball setting, set the radius respect to the full data range of [0,1].
-	ANNdist sqRad = r * r; // Squared radius of the neighborhood. 
-	// Compute 1-flat and 2-flat for each and every item in pointCenterData
-	ofstream ofDebug("neighborFitTest.txt");
-	ofstream ofActualNeighbors("samples_for_eigvec.txt");
-	for (UINT64 i = 0; i < UINT64(pointCenterData.size()); i++)
-	{
-		for (int d = 0; d < dim_rawData; d++)
-			queryPt[d] = pointCenterData[i][d];
-
-		// Search for nearest neighbors
-		int k = k_0;
-		switch (g_params.NnQueryMethod())
-		{
-		case NNQ_KNN:
-			_annKdTree_rawData->annkSearch(// search
-				queryPt,	// query point
-				k,			// number of near neighbors
-				nnIdx,		// nearest neighbors (returned)
-				dists,		// distance (returned)
-				eps			// error bound
-				);
-			break;
-		case NNQ_RBALL:
-			// Search for neighbors inside a hyper-sphere
-			k = _annKdTree_rawData->annkFRSearch(// search
-				queryPt, // query point
-				sqRad, //squared radius
-				k_0, // number of near neighbors
-				nnIdx, // nearest neighbors (returned)
-				dists, // distance (returned)
-				eps);// error bound
-			// The actual sample from the search may be greater than our k0
-			if (k > k_0)
-			{
-				// In that case, query again to get all neighbors
-				SAFE_DELETE_ARRAY(nnIdx); // Need to destroy current arrays and reallocate with size k
-				SAFE_DELETE_ARRAY(dists);
-				nnIdx = new ANNidx[k];
-				dists = new ANNdist[k];
-				k = _annKdTree_rawData->annkFRSearch(// search
-					queryPt, // query point
-					sqRad, //squared radius
-					k, // number of near neighbors
-					nnIdx, // nearest neighbors (returned)
-					dists, // distance (returned)
-					eps);// error bound
-			}
-			//k = k_0; // In that case, we take only k0 samples from the query result
-			break;
-		default: // The default is KNN
-			_annKdTree_rawData->annkSearch(// search
-				queryPt,	// query point
-				k,			// number of near neighbors
-				nnIdx,		// nearest neighbors (returned)
-				dists,		// distance (returned)
-				eps			// error bound
-				);
-			break;
-		}
-
-
-
-		// Get all points for computation
-		// For uncertain datasets, we need several different sampled neighbors
-
-		vector<Eigen::MatrixXd> sampled_neighbors(k); // Each entry contains a matrix that records the m-dimensional samples of the neighbor
-		// Monte-carlo sampling of the neighborhood 
-		uncertain_sampleNeighborhood(distrPointData, nnIdx, k, sampled_neighbors, g_params.Uncertain_samples_per_distr());
-#if OUTPUT_FILE > 0
-		// Print out the result for the first neighbor
-		if (i == 0)
-		{
-			ofstream ofNeighbor0("uncertain_neighborTest0.txt");
-			for (int j = 0; j < sampled_neighbors.size(); j++)
-			{
-				ofNeighbor0 << "neighbor " << j << endl;
-				ofNeighbor0 << sampled_neighbors[j] << endl;
-				//for (int c = 0; c < sampled_neighbors[j].cols(); c++)
-				//{
-				//	ofNeighbor0 << sampled_neighbors[j].col(c).transpose() << endl;
-				//}
-				ofNeighbor0 << endl;
-			}
-			ofNeighbor0.close();
-		}
-#endif
-		// For each sampling, we need to fit a 1-flat!
-		Eigen::VectorXd majEigV;
-		Eigen::VectorXd secMajEigV;
-		UncertainXPCPSample xpcp_tuple(dim_rawData, g_params.Uncertain_samples_per_distr());
-
-
-
-		for (int s = 0; s < g_params.Uncertain_samples_per_distr(); s++)
-		{
-			vector<Eigen::VectorXd> neighbors_one_sample;
-			// Get one setting of the neighborhood sampling
-			//uncertain_get_neighbors_one_sample(sampled_neighbors, s, neighbors_one_sample);
-			uncertain_get_neighbors_from_all_samples(sampled_neighbors, neighbors_one_sample);
-#if OUTPUT_FILE > 0
-			if (i == 0)
-			{
-				ofActualNeighbors << "Setting " << s << endl;
-				for (size_t jj = 0; jj < neighbors_one_sample.size(); jj++)
-					ofActualNeighbors << neighbors_one_sample[jj].transpose() << endl;
-			}
-#endif
-			Eigen::VectorXd mu(dim_rawData);
-
-			// For the case that there is no neighbor
-			if (k == 1)
-			{
-				//// Set only the x-component of the tuple, set 0 for all other components in the tuple!
-				//xpcp_tuple.x = vector<float>(neighbors_one_sample[0].data(), neighbors_one_sample[0].data() + neighbors_one_sample[0].size());
-				majEigV = Eigen::VectorXd::Zero(dim_rawData); // Simple space holder
-				secMajEigV = Eigen::VectorXd::Zero(dim_rawData);
-			}
-			else
-			{
-				Eigen::VectorXd eigVal;
-				Eigen::MatrixXd eigVec;
-				//MyStatistics::EigenSolvCovMatrix(neighbors, eigVal, eigVec);
-				MyStatistics::EigenSolvCovMatrix(neighbors_one_sample, mu, eigVal, eigVec);
-				//if (i == 0)
-				//{
-				//	ofDebug << "mu = " << endl << mu << endl;
-				//	cout << "EigVals: " << endl << eigVal << endl << "EigVecs: " << endl << eigVec << endl;
-				//	ofDebug << "EigVals: " << endl << eigVal << endl << "EigVecs: " << endl << eigVec << endl;
-				//}
-
-
-				majEigV = eigVec.col(eigVec.cols() - 1);
-				majEigV.normalize();
-				secMajEigV = eigVec.col(eigVec.cols() - 2);
-				secMajEigV.normalize();
-#if OUTPUT_FILE > 0
-				if (i == 0)
-				{
-					ofDebug << "mu = " << endl << mu << endl;
-					cout << "Maj Eig Vec: " << endl << majEigV << endl << "Sec Maj Eig Vec: " << endl << secMajEigV << endl;
-					ofDebug << "Maj Eig Vec: " << endl << majEigV << endl << "Sec Maj Eig Vec: " << endl << secMajEigV << endl;
-				}
-#endif
-			}
-			if (s == 0)
-				g_majEigData[i] = majEigV.cast<float>(); // Set Eigen vector data for only one sample
-
-			// compute 1-flat and 2-flat and record min/max of the strength of p-flats
-			uncertain_calc_p_flats_subSpaceMethod(mu, majEigV, secMajEigV, xpcp_tuple, s);
-		}
-
-		// Set uncertain xpcp p-flats
-		g_xpcpData[i] = xpcp_tuple;
-
-	}
-	ofActualNeighbors.close();
-	ofDebug.close();
-	cout << endl << "Number of entries in XPCP data: " << g_xpcpData.size() << endl;
-	/////////////////////////////////////////////////////
-	// !2 Sep 22, 2016: Added normalization func for p-flats 
-	// Do normalization after we compute all p-flats!
-	int normMethod = 0;
-	nomralizePFlatsInSubspaces(g_xpcpData, normMethod);
-	// Set g_1flat_list & g_2flat_list. Comment (!1) when we use normalization
-	for (size_t i = 0; i < g_xpcpData.size(); i++)
-	{
-		vector<pFlatPt*> oneFlats;
-		UncertainXPCPSample* uss = reinterpret_cast<UncertainXPCPSample*>(&g_xpcpData[i]);
-		uss->UncertainXPCPSample::to_pFlatRec(oneFlats, 1, UINT64(i));
-		// Add to global list
-		g_1flat_list.insert(g_1flat_list.end(), oneFlats.begin(), oneFlats.end());
-		vector<pFlatPt*> twoFlats;
-		uss->UncertainXPCPSample::to_pFlatRec(twoFlats, 2, UINT64(i), g_use_repeat_pcp);
-		// Add to global list
-		g_2flat_list.insert(g_2flat_list.end(), twoFlats.begin(), twoFlats.end());
-	}
-	/////////////////////////////////////////////////////
-
-	// Delete raw kd tree?
-	if (_annKdTree_rawData)
-	{
-		SAFE_DELETE(_annKdTree_rawData);
-		_annKdTree_rawData = NULL;
-	}
-	////////////////////////////////////////////////
-
-	// Build KD trees for user query
-	g_0flat_list.resize(g_unique_sampl_raw.size());
-	for (size_t i = 0; i < g_unique_sampl_raw.size(); i++){
-		g_0flat_list[i] = new zeroFlatPt(g_unique_sampl_raw[i]);
-	}
-	if (g_kdTree_rawData){
-		g_kdTree_rawData->clear();
-		g_kdTree_rawData = NULL;
-	}
-	g_kdTree_rawData = new KD<zeroFlatPt*>(dim_rawData);
-	g_kdTree_rawData->buildBalanceTree(g_0flat_list);
-
-	// Build KD tree for 1Flat
-	if (g_kdTree_1flat){
-		g_kdTree_1flat->clear();
-		g_kdTree_1flat = NULL;
-	}
-	g_kdTree_1flat = new KD<pFlatPt*>(2);
-	g_kdTree_1flat->buildBalanceTree(g_1flat_list);
-	//////////////////////////////////////////////////
-	// TODO: Uncomment to write to file!
-	//ofstream ofOneFlatKdTree("oneFlatKdtree.txt");
-	//g_kdTree_1flat->printToFile(ofOneFlatKdTree);
-	//ofOneFlatKdTree.close();
-	//////////////////////////////////////////////////
-	// Build KD tree for 2Flat
-	if (g_kdTree_2flat){
-		g_kdTree_2flat->clear();
-		g_kdTree_2flat = NULL;
-	}
-	g_kdTree_2flat = new KD<pFlatPt*>(2);
-	g_kdTree_2flat->buildBalanceTree(g_2flat_list);
-	//////////////////////////////////////////////////
-	// TODO: Uncomment to write to file!
-	//ofstream ofTwoFlatKdTree("twoFlatKdtree.txt");
-	//g_kdTree_2flat->printToFile(ofTwoFlatKdTree);
-	//ofTwoFlatKdTree.close();
-	/////////////////////////////////////////////////
-
-	SAFE_DELETE_ARRAY(nnIdx);
-	SAFE_DELETE_ARRAY(dists);
-}
-
-void XPCPdataAnalyzer::processVecRawData(const vector<vector<float>>& pointCenterData, const std::vector<std::vector<float>>& samplePos)
-{
-	if (pointCenterData.empty())
-	{
-		cout << "Empty raw data!" << endl;
-		return;
-	}
-	// Don't use nearest neighbors! Use vector values for p-flats directly!
-	//Set dimensions of the data
-	int dim_rawData = pointCenterData[0].size();
-	_numSamples = UINT64(pointCenterData.size());
-	_dimRawData = dim_rawData; // Raw data dimension
-	_dimXPCPdata = dim_rawData + 2 * (dim_rawData - 1) + 2 * (dim_rawData - 2); // XPCP data dimension
-	//Preperations: Clear list
-	g_xpcpData.resize(pointCenterData.size(), XPCPSample(dim_rawData));
-	// build pcp if necessary
-	if (_pcp == NULL)
-	{
-		vector<string> attribs(dim_rawData);
-		for (size_t i = 0; i < attribs.size(); i++)
-			attribs[i] = string("attr_") + number2String(int(i));
-		_pcp = new PCPInselberg(attribs);
-	}
-
-	// Allocate space for Major eigen data
-	g_majEigData.resize(pointCenterData.size());
-	// use global variables to keep the p-flat records
-	g_1flat_list.clear();
-	g_2flat_list.clear();
-
-	// Prepare variables to record min/max of p-flat strength in each subspace
-	_1flatsMinMaxPerSubspace.clear();
-	_1flatsMinMaxPerSubspace.resize(dim_rawData - 1);
-	for (size_t i = 0; i < _1flatsMinMaxPerSubspace.size(); i++)
-	{
-		_1flatsMinMaxPerSubspace[i].x = numeric_limits<float>::max();
-		_1flatsMinMaxPerSubspace[i].y = -numeric_limits<float>::max();
-	}
-	_2flatsMinMaxPerSubspace.clear();
-	_2flatsMinMaxPerSubspace.resize(dim_rawData - 2);
-	for (size_t i = 0; i < _2flatsMinMaxPerSubspace.size(); i++)
-	{
-		_2flatsMinMaxPerSubspace[i].x = numeric_limits<float>::max();
-		_2flatsMinMaxPerSubspace[i].y = -numeric_limits<float>::max();
-	}
-	ANNdist sqRad = 0.1 * 0.1;
-
-	// Compute 1-flat and 2-flat for each and every item in pointCenterData
-	ofstream ofDebug("neighborFitTest.txt");
-	for (UINT64 i = 0; i < pointCenterData.size(); i++)
-	{
-		// Just need to take the pointCenterData[i]
-		vector<float> vval = pointCenterData[i];
-		vector<float> pos = samplePos[i];
-		Eigen::VectorXf vecVval(vval.size());
-		for (size_t j = 0; j < vval.size(); j++)
-			vecVval[j] = vval[j];
-		XPCPSample xpcp_tuple(dim_rawData);
-		calc_p_flats_fromVecData(vval, pos, xpcp_tuple);
-
-		g_xpcpData[i] = xpcp_tuple;
-		g_majEigData[i] = vecVval; // Set Eigen vector data
-		///////////////////////////////////////////////////////////////////////
-		// !1 TODO: If we turn off normalization (!2), uncomment codes in the block
-		//// Convert p-flat data and store to global variables
-		//vector<pFlatPt*> oneFlats;
-		//xpcp_tuple.to_pFlatRec(oneFlats, 1, UINT64(i));
-		//// Add to global list
-		//g_1flat_list.insert(g_1flat_list.end(), oneFlats.begin(), oneFlats.end());
-		//vector<pFlatPt*> twoFlats;
-		//xpcp_tuple.to_pFlatRec(twoFlats, 2, UINT64(i));
-		//// Add to global list
-		//g_2flat_list.insert(g_2flat_list.end(), twoFlats.begin(), twoFlats.end());
-		////////////////////////////////////////////////////////////////////////
-
-	}
-	ofDebug.close();
-	cout << "Number of entries in XPCP data: " << g_xpcpData.size() << endl;
-	/////////////////////////////////////////////////////
-	// !2 Sep 22, 2016: Added normalization func for p-flats 
-	// Do normalization after we compute all p-flats!
-	int normMethod = 0;
-	nomralizePFlatsInSubspaces(g_xpcpData, normMethod);
-	// Set g_1flat_list & g_2flat_list. Comment (!1) when we use normalization
-	for (size_t i = 0; i < g_xpcpData.size(); i++)
-	{
-		vector<pFlatPt*> oneFlats;
-		g_xpcpData[i].to_pFlatRec(oneFlats, 1, UINT64(i));
-		// Add to global list
-		g_1flat_list.insert(g_1flat_list.end(), oneFlats.begin(), oneFlats.end());
-		vector<pFlatPt*> twoFlats;
-		g_xpcpData[i].to_pFlatRec(twoFlats, 2, UINT64(i));
-		// Add to global list
-		//g_2flat_list.insert(g_2flat_list.end(), twoFlats.begin(), twoFlats.end());
-	}
-	////////////////////////////////////////////////
-	// Remove duplicate records
-	removeDuplicateRecords(pointCenterData);
-	/////////////////////////////////////////////
-	// TODO: comment out when test is done
-	/*ofstream ofUniqueOneFlatTest("uniqOneFlatTest.txt");
-	for (size_t i = 0; i < g_1flat_list.size(); i++)
-	ofUniqueOneFlatTest << *(g_1flat_list[i]) << endl;
-	ofUniqueOneFlatTest.close();*/
-	////////////////////////////////////////////////
-
-	// Build KD trees for user query
-	g_0flat_list.resize(g_unique_sampl_raw.size());
-	for (size_t i = 0; i < g_unique_sampl_raw.size(); i++){
-		g_0flat_list[i] = new zeroFlatPt(g_unique_sampl_raw[i]);
-	}
-	if (g_kdTree_rawData){
-		g_kdTree_rawData->clear();
-		g_kdTree_rawData = NULL;
-	}
-	g_kdTree_rawData = new KD<zeroFlatPt*>(dim_rawData);
-	g_kdTree_rawData->buildBalanceTree(g_0flat_list);
-
-	// Build KD tree for 1Flat
-	if (g_kdTree_1flat){
-		g_kdTree_1flat->clear();
-		g_kdTree_1flat = NULL;
-	}
-	g_kdTree_1flat = new KD<pFlatPt*>(2);
-	g_kdTree_1flat->buildBalanceTree(g_1flat_list);
-	//////////////////////////////////////////////////
-	// TODO: Uncomment to write to file!
-	//ofstream ofOneFlatKdTree("oneFlatKdtree.txt");
-	//g_kdTree_1flat->printToFile(ofOneFlatKdTree);
-	//ofOneFlatKdTree.close();
-	//////////////////////////////////////////////////
-	// Build KD tree for 2Flat
-	if (g_kdTree_2flat){
-		g_kdTree_2flat->clear();
-		g_kdTree_2flat = NULL;
-	}
-	g_kdTree_2flat = new KD<pFlatPt*>(2);
-	g_kdTree_2flat->buildBalanceTree(g_2flat_list);
-	//////////////////////////////////////////////////
-	// TODO: Uncomment to write to file!
-	//ofstream ofTwoFlatKdTree("twoFlatKdtree.txt");
-	//g_kdTree_2flat->printToFile(ofTwoFlatKdTree);
-	//ofTwoFlatKdTree.close();
-	/////////////////////////////////////////////////
-}
-
-
-void XPCPdataAnalyzer::processTrajRawData(const vector<vector<float>>& rawData)
-{
-	if (rawData.empty())
-	{
-		cout << "Empty raw data!" << endl;
-		return;
-	}
-	cout << "Processing raw data as trajectory data!" << endl;
-	// Don't use nearest neighbors! Use vector values for p-flats directly!
-	//Set dimensions of the data
-	int dim_rawData = rawData[0].size();
-	_numSamples = UINT64(rawData.size());
-	_dimRawData = dim_rawData; // Raw data dimension
-	_dimXPCPdata = dim_rawData + 2 * (dim_rawData - 1) + 2 * (dim_rawData - 2); // XPCP data dimension
-	//Preperations: Clear list
-	g_xpcpData.resize(rawData.size(), XPCPSample(dim_rawData));
-	// build pcp if necessary
-	if (_pcp == NULL)
-	{
-		vector<string> attribs(dim_rawData);
-		for (size_t i = 0; i < attribs.size(); i++)
-			attribs[i] = string("attr_") + number2String(int(i));
-		_pcp = new PCPInselberg(attribs);
-	}
-
-	// Allocate space for Major eigen data
-	g_majEigData.resize(rawData.size());
-	// use global variables to keep the p-flat records
-	g_1flat_list.clear();
-	g_2flat_list.clear();
-
-	// Prepare variables to record min/max of p-flat strength in each subspace
-	_1flatsMinMaxPerSubspace.clear();
-	_1flatsMinMaxPerSubspace.resize(dim_rawData - 1);
-	for (size_t i = 0; i < _1flatsMinMaxPerSubspace.size(); i++)
-	{
-		_1flatsMinMaxPerSubspace[i].x = numeric_limits<float>::max();
-		_1flatsMinMaxPerSubspace[i].y = -numeric_limits<float>::max();
-	}
-	_2flatsMinMaxPerSubspace.clear();
-	_2flatsMinMaxPerSubspace.resize(dim_rawData - 2);
-	for (size_t i = 0; i < _2flatsMinMaxPerSubspace.size(); i++)
-	{
-		_2flatsMinMaxPerSubspace[i].x = numeric_limits<float>::max();
-		_2flatsMinMaxPerSubspace[i].y = -numeric_limits<float>::max();
-	}
-
-	// Compute 1-flat and 2-flat for each and every item in pointCenterData
-	ofstream ofDebug("neighborFitTest.txt");
-	for (UINT64 i = 0; i < rawData.size(); i++)
-	{
-		// Just need to take the pointCenterData[i]
-		vector<float> p1 = rawData[i];     // current point
-		vector<float> p2 = (i == rawData.size() - 1) ? p1 : rawData[i + 1]; // next point
-		// Assume linear connection between p1 and p2 now!
-		// TODO: switch to quadratic connection
-		XPCPSample xpcp_tuple(dim_rawData);
-		calc_p_flats_fromTrajData(p1, p2, xpcp_tuple);
-		Eigen::VectorXf tangent(p1.size());
-		for (size_t j = 0; j < p1.size(); j++)
-			tangent(j) = p2[j] - p1[j];
-		g_xpcpData[i] = xpcp_tuple;
-		g_majEigData[i] = tangent; // Set Eigen vector data
-
-
-	}
-	ofDebug.close();
-	cout << "Number of entries in XPCP data: " << g_xpcpData.size() << endl;
-	/////////////////////////////////////////////////////
-	// !2 Sep 22, 2016: Added normalization func for p-flats 
-	// Do normalization after we compute all p-flats!
-	int normMethod = 0;
-	nomralizePFlatsInSubspaces(g_xpcpData, normMethod);
-	// Set g_1flat_list & g_2flat_list. Comment (!1) when we use normalization
-	for (size_t i = 0; i < g_xpcpData.size(); i++)
-	{
-		vector<pFlatPt*> oneFlats;
-		g_xpcpData[i].to_pFlatRec(oneFlats, 1, UINT64(i));
-		// Add to global list
-		g_1flat_list.insert(g_1flat_list.end(), oneFlats.begin(), oneFlats.end());
-		vector<pFlatPt*> twoFlats;
-		g_xpcpData[i].to_pFlatRec(twoFlats, 2, UINT64(i));
-		// Add to global list
-		//g_2flat_list.insert(g_2flat_list.end(), twoFlats.begin(), twoFlats.end());
-	}
-	////////////////////////////////////////////////
-	// Remove duplicate records
-	removeDuplicateRecords(rawData);
-
-	// Build KD trees for user query
-	g_0flat_list.resize(g_unique_sampl_raw.size());
-	for (size_t i = 0; i < g_unique_sampl_raw.size(); i++){
-		g_0flat_list[i] = new zeroFlatPt(g_unique_sampl_raw[i]);
-	}
-	if (g_kdTree_rawData){
-		g_kdTree_rawData->clear();
-		g_kdTree_rawData = NULL;
-	}
-	g_kdTree_rawData = new KD<zeroFlatPt*>(dim_rawData);
-	g_kdTree_rawData->buildBalanceTree(g_0flat_list);
-
-	// Build KD tree for 1Flat
-	if (g_kdTree_1flat){
-		g_kdTree_1flat->clear();
-		g_kdTree_1flat = NULL;
-	}
-	g_kdTree_1flat = new KD<pFlatPt*>(2);
-	g_kdTree_1flat->buildBalanceTree(g_1flat_list);
-	//////////////////////////////////////////////////
-	// TODO: Uncomment to write to file!
-	//ofstream ofOneFlatKdTree("oneFlatKdtree.txt");
-	//g_kdTree_1flat->printToFile(ofOneFlatKdTree);
-	//ofOneFlatKdTree.close();
-	//////////////////////////////////////////////////
-	// Build KD tree for 2Flat
-	if (g_kdTree_2flat){
-		g_kdTree_2flat->clear();
-		g_kdTree_2flat = NULL;
-	}
-	g_kdTree_2flat = new KD<pFlatPt*>(2);
-	g_kdTree_2flat->buildBalanceTree(g_2flat_list);
-	//////////////////////////////////////////////////
-	// TODO: Uncomment to write to file!
-	//ofstream ofTwoFlatKdTree("twoFlatKdtree.txt");
-	//g_kdTree_2flat->printToFile(ofTwoFlatKdTree);
-	//ofTwoFlatKdTree.close();
-	/////////////////////////////////////////////////
-}
+//void XPCPdataAnalyzer::processUncertainRawData(const vector<GaussianXd>& distrPointData, int num_nearest_neighbors)
+//{
+//	// Create a certain point-based raw data by taking the center of distrPointData
+//	vector<vector<float>> pointCenterData;
+//
+//	uncertain_getPointCenters(distrPointData, pointCenterData);
+//	// Copy to g_sampledRaw
+//	g_sampled_raw = pointCenterData;
+//
+//	if (_annKdTree_rawData == NULL)
+//		buildKDTree(pointCenterData, &_annKdTree_rawData);
+//	// use kdTree_rawData to find nearest neighbors to compute 1-flat & 2-flat
+//	int k_0 = num_nearest_neighbors;
+//	int dim_rawData = pointCenterData[0].size();
+//	//Set dimensions of the data
+//	_numSamples = UINT64(pointCenterData.size());
+//	_dimRawData = dim_rawData; // Raw data dimension
+//	_dimXPCPdata = dim_rawData + 2 * (dim_rawData - 1) + 2 * (dim_rawData - 2); // XPCP data dimension
+//	// Do procssing
+//	double eps = 0.0; // error bound
+//	ANNpoint     queryPt; // query point
+//	ANNidxArray  nnIdx;   // near neighbor indices
+//	ANNdistArray dists;   // near neighbor distances   
+//	queryPt = annAllocPt(dim_rawData);
+//	nnIdx = new ANNidx[k_0];
+//	dists = new ANNdist[k_0];
+//	//Preperations: Clear list
+//	g_xpcpData.resize(pointCenterData.size(), UncertainXPCPSample(dim_rawData, g_params.Uncertain_samples_per_distr()));
+//	// build pcp if necessary
+//	if (_pcp == NULL)
+//	{
+//		vector<string> attribs(dim_rawData);
+//		for (size_t i = 0; i < attribs.size(); i++)
+//			attribs[i] = string("attr_") + number2String(int(i));
+//		_pcp = new PCPInselberg(attribs);
+//	}
+//
+//	//// Create a temporary structure to build the KD-tree
+//	//vector<vector<float>> vXpcpData(pointCenterData.size());
+//	// Allocate space for Major eigen data
+//	g_majEigData.resize(pointCenterData.size());
+//	// use global variables to keep the p-flat records
+//	g_1flat_list.clear();
+//	g_2flat_list.clear();
+//
+//	// Prepare variables to record min/max of p-flat strength in each subspace
+//	_1flatsMinMaxPerSubspace.clear();
+//	_1flatsMinMaxPerSubspace.resize(dim_rawData - 1);
+//	for (size_t i = 0; i < _1flatsMinMaxPerSubspace.size(); i++)
+//	{
+//		_1flatsMinMaxPerSubspace[i].x = numeric_limits<float>::max();
+//		_1flatsMinMaxPerSubspace[i].y = -numeric_limits<float>::max();
+//	}
+//	_2flatsMinMaxPerSubspace.clear();
+//	_2flatsMinMaxPerSubspace.resize(dim_rawData - 2);
+//	for (size_t i = 0; i < _2flatsMinMaxPerSubspace.size(); i++)
+//	{
+//		_2flatsMinMaxPerSubspace[i].x = numeric_limits<float>::max();
+//		_2flatsMinMaxPerSubspace[i].y = -numeric_limits<float>::max();
+//	}
+//	double r = 0.1;       // In a r-ball setting, set the radius respect to the full data range of [0,1].
+//	ANNdist sqRad = r * r; // Squared radius of the neighborhood. 
+//	// Compute 1-flat and 2-flat for each and every item in pointCenterData
+//	ofstream ofDebug("neighborFitTest.txt");
+//	ofstream ofActualNeighbors("samples_for_eigvec.txt");
+//	for (UINT64 i = 0; i < UINT64(pointCenterData.size()); i++)
+//	{
+//		for (int d = 0; d < dim_rawData; d++)
+//			queryPt[d] = pointCenterData[i][d];
+//
+//		// Search for nearest neighbors
+//		int k = k_0;
+//		switch (g_params.NnQueryMethod())
+//		{
+//		case NNQ_KNN:
+//			_annKdTree_rawData->annkSearch(// search
+//				queryPt,	// query point
+//				k,			// number of near neighbors
+//				nnIdx,		// nearest neighbors (returned)
+//				dists,		// distance (returned)
+//				eps			// error bound
+//				);
+//			break;
+//		case NNQ_RBALL:
+//			// Search for neighbors inside a hyper-sphere
+//			k = _annKdTree_rawData->annkFRSearch(// search
+//				queryPt, // query point
+//				sqRad, //squared radius
+//				k_0, // number of near neighbors
+//				nnIdx, // nearest neighbors (returned)
+//				dists, // distance (returned)
+//				eps);// error bound
+//			// The actual sample from the search may be greater than our k0
+//			if (k > k_0)
+//			{
+//				// In that case, query again to get all neighbors
+//				SAFE_DELETE_ARRAY(nnIdx); // Need to destroy current arrays and reallocate with size k
+//				SAFE_DELETE_ARRAY(dists);
+//				nnIdx = new ANNidx[k];
+//				dists = new ANNdist[k];
+//				k = _annKdTree_rawData->annkFRSearch(// search
+//					queryPt, // query point
+//					sqRad, //squared radius
+//					k, // number of near neighbors
+//					nnIdx, // nearest neighbors (returned)
+//					dists, // distance (returned)
+//					eps);// error bound
+//			}
+//			//k = k_0; // In that case, we take only k0 samples from the query result
+//			break;
+//		default: // The default is KNN
+//			_annKdTree_rawData->annkSearch(// search
+//				queryPt,	// query point
+//				k,			// number of near neighbors
+//				nnIdx,		// nearest neighbors (returned)
+//				dists,		// distance (returned)
+//				eps			// error bound
+//				);
+//			break;
+//		}
+//
+//
+//
+//		// Get all points for computation
+//		// For uncertain datasets, we need several different sampled neighbors
+//
+//		vector<Eigen::MatrixXd> sampled_neighbors(k); // Each entry contains a matrix that records the m-dimensional samples of the neighbor
+//		// Monte-carlo sampling of the neighborhood 
+//		uncertain_sampleNeighborhood(distrPointData, nnIdx, k, sampled_neighbors, g_params.Uncertain_samples_per_distr());
+//#if OUTPUT_FILE > 0
+//		// Print out the result for the first neighbor
+//		if (i == 0)
+//		{
+//			ofstream ofNeighbor0("uncertain_neighborTest0.txt");
+//			for (int j = 0; j < sampled_neighbors.size(); j++)
+//			{
+//				ofNeighbor0 << "neighbor " << j << endl;
+//				ofNeighbor0 << sampled_neighbors[j] << endl;
+//				//for (int c = 0; c < sampled_neighbors[j].cols(); c++)
+//				//{
+//				//	ofNeighbor0 << sampled_neighbors[j].col(c).transpose() << endl;
+//				//}
+//				ofNeighbor0 << endl;
+//			}
+//			ofNeighbor0.close();
+//		}
+//#endif
+//		// For each sampling, we need to fit a 1-flat!
+//		Eigen::VectorXd majEigV;
+//		Eigen::VectorXd secMajEigV;
+//		UncertainXPCPSample xpcp_tuple(dim_rawData, g_params.Uncertain_samples_per_distr());
+//
+//
+//
+//		for (int s = 0; s < g_params.Uncertain_samples_per_distr(); s++)
+//		{
+//			vector<Eigen::VectorXd> neighbors_one_sample;
+//			// Get one setting of the neighborhood sampling
+//			//uncertain_get_neighbors_one_sample(sampled_neighbors, s, neighbors_one_sample);
+//			uncertain_get_neighbors_from_all_samples(sampled_neighbors, neighbors_one_sample);
+//#if OUTPUT_FILE > 0
+//			if (i == 0)
+//			{
+//				ofActualNeighbors << "Setting " << s << endl;
+//				for (size_t jj = 0; jj < neighbors_one_sample.size(); jj++)
+//					ofActualNeighbors << neighbors_one_sample[jj].transpose() << endl;
+//			}
+//#endif
+//			Eigen::VectorXd mu(dim_rawData);
+//
+//			// For the case that there is no neighbor
+//			if (k == 1)
+//			{
+//				//// Set only the x-component of the tuple, set 0 for all other components in the tuple!
+//				//xpcp_tuple.x = vector<float>(neighbors_one_sample[0].data(), neighbors_one_sample[0].data() + neighbors_one_sample[0].size());
+//				majEigV = Eigen::VectorXd::Zero(dim_rawData); // Simple space holder
+//				secMajEigV = Eigen::VectorXd::Zero(dim_rawData);
+//			}
+//			else
+//			{
+//				Eigen::VectorXd eigVal;
+//				Eigen::MatrixXd eigVec;
+//				//MyStatistics::EigenSolvCovMatrix(neighbors, eigVal, eigVec);
+//				MyStatistics::EigenSolvCovMatrix(neighbors_one_sample, mu, eigVal, eigVec);
+//				//if (i == 0)
+//				//{
+//				//	ofDebug << "mu = " << endl << mu << endl;
+//				//	cout << "EigVals: " << endl << eigVal << endl << "EigVecs: " << endl << eigVec << endl;
+//				//	ofDebug << "EigVals: " << endl << eigVal << endl << "EigVecs: " << endl << eigVec << endl;
+//				//}
+//
+//
+//				majEigV = eigVec.col(eigVec.cols() - 1);
+//				majEigV.normalize();
+//				secMajEigV = eigVec.col(eigVec.cols() - 2);
+//				secMajEigV.normalize();
+//#if OUTPUT_FILE > 0
+//				if (i == 0)
+//				{
+//					ofDebug << "mu = " << endl << mu << endl;
+//					cout << "Maj Eig Vec: " << endl << majEigV << endl << "Sec Maj Eig Vec: " << endl << secMajEigV << endl;
+//					ofDebug << "Maj Eig Vec: " << endl << majEigV << endl << "Sec Maj Eig Vec: " << endl << secMajEigV << endl;
+//				}
+//#endif
+//			}
+//			if (s == 0)
+//				g_majEigData[i] = majEigV.cast<float>(); // Set Eigen vector data for only one sample
+//
+//			// compute 1-flat and 2-flat and record min/max of the strength of p-flats
+//			uncertain_calc_p_flats_subSpaceMethod(mu, majEigV, secMajEigV, xpcp_tuple, s);
+//		}
+//
+//		// Set uncertain xpcp p-flats
+//		g_xpcpData[i] = xpcp_tuple;
+//
+//	}
+//	ofActualNeighbors.close();
+//	ofDebug.close();
+//	cout << endl << "Number of entries in XPCP data: " << g_xpcpData.size() << endl;
+//	/////////////////////////////////////////////////////
+//	// !2 Sep 22, 2016: Added normalization func for p-flats 
+//	// Do normalization after we compute all p-flats!
+//	int normMethod = 0;
+//	nomralizePFlatsInSubspaces(g_xpcpData, normMethod);
+//	// Set g_1flat_list & g_2flat_list. Comment (!1) when we use normalization
+//	for (size_t i = 0; i < g_xpcpData.size(); i++)
+//	{
+//		vector<pFlatPt*> oneFlats;
+//		UncertainXPCPSample* uss = reinterpret_cast<UncertainXPCPSample*>(&g_xpcpData[i]);
+//		uss->UncertainXPCPSample::to_pFlatRec(oneFlats, 1, UINT64(i));
+//		// Add to global list
+//		g_1flat_list.insert(g_1flat_list.end(), oneFlats.begin(), oneFlats.end());
+//		vector<pFlatPt*> twoFlats;
+//		uss->UncertainXPCPSample::to_pFlatRec(twoFlats, 2, UINT64(i), g_use_repeat_pcp);
+//		// Add to global list
+//		g_2flat_list.insert(g_2flat_list.end(), twoFlats.begin(), twoFlats.end());
+//	}
+//	/////////////////////////////////////////////////////
+//
+//	// Delete raw kd tree?
+//	if (_annKdTree_rawData)
+//	{
+//		SAFE_DELETE(_annKdTree_rawData);
+//		_annKdTree_rawData = NULL;
+//	}
+//	////////////////////////////////////////////////
+//
+//	// Build KD trees for user query
+//	g_0flat_list.resize(g_unique_sampl_raw.size());
+//	for (size_t i = 0; i < g_unique_sampl_raw.size(); i++){
+//		g_0flat_list[i] = new zeroFlatPt(g_unique_sampl_raw[i]);
+//	}
+//	if (g_kdTree_rawData){
+//		g_kdTree_rawData->clear();
+//		g_kdTree_rawData = NULL;
+//	}
+//	g_kdTree_rawData = new KD<zeroFlatPt*>(dim_rawData);
+//	g_kdTree_rawData->buildBalanceTree(g_0flat_list);
+//
+//	// Build KD tree for 1Flat
+//	if (g_kdTree_1flat){
+//		g_kdTree_1flat->clear();
+//		g_kdTree_1flat = NULL;
+//	}
+//	g_kdTree_1flat = new KD<pFlatPt*>(2);
+//	g_kdTree_1flat->buildBalanceTree(g_1flat_list);
+//	//////////////////////////////////////////////////
+//	// TODO: Uncomment to write to file!
+//	//ofstream ofOneFlatKdTree("oneFlatKdtree.txt");
+//	//g_kdTree_1flat->printToFile(ofOneFlatKdTree);
+//	//ofOneFlatKdTree.close();
+//	//////////////////////////////////////////////////
+//	// Build KD tree for 2Flat
+//	if (g_kdTree_2flat){
+//		g_kdTree_2flat->clear();
+//		g_kdTree_2flat = NULL;
+//	}
+//	g_kdTree_2flat = new KD<pFlatPt*>(2);
+//	g_kdTree_2flat->buildBalanceTree(g_2flat_list);
+//	//////////////////////////////////////////////////
+//	// TODO: Uncomment to write to file!
+//	//ofstream ofTwoFlatKdTree("twoFlatKdtree.txt");
+//	//g_kdTree_2flat->printToFile(ofTwoFlatKdTree);
+//	//ofTwoFlatKdTree.close();
+//	/////////////////////////////////////////////////
+//
+//	SAFE_DELETE_ARRAY(nnIdx);
+//	SAFE_DELETE_ARRAY(dists);
+//}
+//
+//void XPCPdataAnalyzer::processVecRawData(const vector<vector<float>>& pointCenterData, const std::vector<std::vector<float>>& samplePos)
+//{
+//	if (pointCenterData.empty())
+//	{
+//		cout << "Empty raw data!" << endl;
+//		return;
+//	}
+//	// Don't use nearest neighbors! Use vector values for p-flats directly!
+//	//Set dimensions of the data
+//	int dim_rawData = pointCenterData[0].size();
+//	_numSamples = UINT64(pointCenterData.size());
+//	_dimRawData = dim_rawData; // Raw data dimension
+//	_dimXPCPdata = dim_rawData + 2 * (dim_rawData - 1) + 2 * (dim_rawData - 2); // XPCP data dimension
+//	//Preperations: Clear list
+//	g_xpcpData.resize(pointCenterData.size(), XPCPSample(dim_rawData));
+//	// build pcp if necessary
+//	if (_pcp == NULL)
+//	{
+//		vector<string> attribs(dim_rawData);
+//		for (size_t i = 0; i < attribs.size(); i++)
+//			attribs[i] = string("attr_") + number2String(int(i));
+//		_pcp = new PCPInselberg(attribs);
+//	}
+//
+//	// Allocate space for Major eigen data
+//	g_majEigData.resize(pointCenterData.size());
+//	// use global variables to keep the p-flat records
+//	g_1flat_list.clear();
+//	g_2flat_list.clear();
+//
+//	// Prepare variables to record min/max of p-flat strength in each subspace
+//	_1flatsMinMaxPerSubspace.clear();
+//	_1flatsMinMaxPerSubspace.resize(dim_rawData - 1);
+//	for (size_t i = 0; i < _1flatsMinMaxPerSubspace.size(); i++)
+//	{
+//		_1flatsMinMaxPerSubspace[i].x = numeric_limits<float>::max();
+//		_1flatsMinMaxPerSubspace[i].y = -numeric_limits<float>::max();
+//	}
+//	_2flatsMinMaxPerSubspace.clear();
+//	_2flatsMinMaxPerSubspace.resize(dim_rawData - 2);
+//	for (size_t i = 0; i < _2flatsMinMaxPerSubspace.size(); i++)
+//	{
+//		_2flatsMinMaxPerSubspace[i].x = numeric_limits<float>::max();
+//		_2flatsMinMaxPerSubspace[i].y = -numeric_limits<float>::max();
+//	}
+//	ANNdist sqRad = 0.1 * 0.1;
+//
+//	// Compute 1-flat and 2-flat for each and every item in pointCenterData
+//	ofstream ofDebug("neighborFitTest.txt");
+//	for (UINT64 i = 0; i < pointCenterData.size(); i++)
+//	{
+//		// Just need to take the pointCenterData[i]
+//		vector<float> vval = pointCenterData[i];
+//		vector<float> pos = samplePos[i];
+//		Eigen::VectorXf vecVval(vval.size());
+//		for (size_t j = 0; j < vval.size(); j++)
+//			vecVval[j] = vval[j];
+//		XPCPSample xpcp_tuple(dim_rawData);
+//		calc_p_flats_fromVecData(vval, pos, xpcp_tuple);
+//
+//		g_xpcpData[i] = xpcp_tuple;
+//		g_majEigData[i] = vecVval; // Set Eigen vector data
+//		///////////////////////////////////////////////////////////////////////
+//		// !1 TODO: If we turn off normalization (!2), uncomment codes in the block
+//		//// Convert p-flat data and store to global variables
+//		//vector<pFlatPt*> oneFlats;
+//		//xpcp_tuple.to_pFlatRec(oneFlats, 1, UINT64(i));
+//		//// Add to global list
+//		//g_1flat_list.insert(g_1flat_list.end(), oneFlats.begin(), oneFlats.end());
+//		//vector<pFlatPt*> twoFlats;
+//		//xpcp_tuple.to_pFlatRec(twoFlats, 2, UINT64(i));
+//		//// Add to global list
+//		//g_2flat_list.insert(g_2flat_list.end(), twoFlats.begin(), twoFlats.end());
+//		////////////////////////////////////////////////////////////////////////
+//
+//	}
+//	ofDebug.close();
+//	cout << "Number of entries in XPCP data: " << g_xpcpData.size() << endl;
+//	/////////////////////////////////////////////////////
+//	// !2 Sep 22, 2016: Added normalization func for p-flats 
+//	// Do normalization after we compute all p-flats!
+//	int normMethod = 0;
+//	nomralizePFlatsInSubspaces(g_xpcpData, normMethod);
+//	// Set g_1flat_list & g_2flat_list. Comment (!1) when we use normalization
+//	for (size_t i = 0; i < g_xpcpData.size(); i++)
+//	{
+//		vector<pFlatPt*> oneFlats;
+//		g_xpcpData[i].to_pFlatRec(oneFlats, 1, UINT64(i));
+//		// Add to global list
+//		g_1flat_list.insert(g_1flat_list.end(), oneFlats.begin(), oneFlats.end());
+//		vector<pFlatPt*> twoFlats;
+//		g_xpcpData[i].to_pFlatRec(twoFlats, 2, UINT64(i));
+//		// Add to global list
+//		//g_2flat_list.insert(g_2flat_list.end(), twoFlats.begin(), twoFlats.end());
+//	}
+//	////////////////////////////////////////////////
+//	// Remove duplicate records
+//	removeDuplicateRecords(pointCenterData);
+//	/////////////////////////////////////////////
+//	// TODO: comment out when test is done
+//	/*ofstream ofUniqueOneFlatTest("uniqOneFlatTest.txt");
+//	for (size_t i = 0; i < g_1flat_list.size(); i++)
+//	ofUniqueOneFlatTest << *(g_1flat_list[i]) << endl;
+//	ofUniqueOneFlatTest.close();*/
+//	////////////////////////////////////////////////
+//
+//	// Build KD trees for user query
+//	g_0flat_list.resize(g_unique_sampl_raw.size());
+//	for (size_t i = 0; i < g_unique_sampl_raw.size(); i++){
+//		g_0flat_list[i] = new zeroFlatPt(g_unique_sampl_raw[i]);
+//	}
+//	if (g_kdTree_rawData){
+//		g_kdTree_rawData->clear();
+//		g_kdTree_rawData = NULL;
+//	}
+//	g_kdTree_rawData = new KD<zeroFlatPt*>(dim_rawData);
+//	g_kdTree_rawData->buildBalanceTree(g_0flat_list);
+//
+//	// Build KD tree for 1Flat
+//	if (g_kdTree_1flat){
+//		g_kdTree_1flat->clear();
+//		g_kdTree_1flat = NULL;
+//	}
+//	g_kdTree_1flat = new KD<pFlatPt*>(2);
+//	g_kdTree_1flat->buildBalanceTree(g_1flat_list);
+//	//////////////////////////////////////////////////
+//	// TODO: Uncomment to write to file!
+//	//ofstream ofOneFlatKdTree("oneFlatKdtree.txt");
+//	//g_kdTree_1flat->printToFile(ofOneFlatKdTree);
+//	//ofOneFlatKdTree.close();
+//	//////////////////////////////////////////////////
+//	// Build KD tree for 2Flat
+//	if (g_kdTree_2flat){
+//		g_kdTree_2flat->clear();
+//		g_kdTree_2flat = NULL;
+//	}
+//	g_kdTree_2flat = new KD<pFlatPt*>(2);
+//	g_kdTree_2flat->buildBalanceTree(g_2flat_list);
+//	//////////////////////////////////////////////////
+//	// TODO: Uncomment to write to file!
+//	//ofstream ofTwoFlatKdTree("twoFlatKdtree.txt");
+//	//g_kdTree_2flat->printToFile(ofTwoFlatKdTree);
+//	//ofTwoFlatKdTree.close();
+//	/////////////////////////////////////////////////
+//}
+//
+//
+//void XPCPdataAnalyzer::processTrajRawData(const vector<vector<float>>& rawData)
+//{
+//	if (rawData.empty())
+//	{
+//		cout << "Empty raw data!" << endl;
+//		return;
+//	}
+//	cout << "Processing raw data as trajectory data!" << endl;
+//	// Don't use nearest neighbors! Use vector values for p-flats directly!
+//	//Set dimensions of the data
+//	int dim_rawData = rawData[0].size();
+//	_numSamples = UINT64(rawData.size());
+//	_dimRawData = dim_rawData; // Raw data dimension
+//	_dimXPCPdata = dim_rawData + 2 * (dim_rawData - 1) + 2 * (dim_rawData - 2); // XPCP data dimension
+//	//Preperations: Clear list
+//	g_xpcpData.resize(rawData.size(), XPCPSample(dim_rawData));
+//	// build pcp if necessary
+//	if (_pcp == NULL)
+//	{
+//		vector<string> attribs(dim_rawData);
+//		for (size_t i = 0; i < attribs.size(); i++)
+//			attribs[i] = string("attr_") + number2String(int(i));
+//		_pcp = new PCPInselberg(attribs);
+//	}
+//
+//	// Allocate space for Major eigen data
+//	g_majEigData.resize(rawData.size());
+//	// use global variables to keep the p-flat records
+//	g_1flat_list.clear();
+//	g_2flat_list.clear();
+//
+//	// Prepare variables to record min/max of p-flat strength in each subspace
+//	_1flatsMinMaxPerSubspace.clear();
+//	_1flatsMinMaxPerSubspace.resize(dim_rawData - 1);
+//	for (size_t i = 0; i < _1flatsMinMaxPerSubspace.size(); i++)
+//	{
+//		_1flatsMinMaxPerSubspace[i].x = numeric_limits<float>::max();
+//		_1flatsMinMaxPerSubspace[i].y = -numeric_limits<float>::max();
+//	}
+//	_2flatsMinMaxPerSubspace.clear();
+//	_2flatsMinMaxPerSubspace.resize(dim_rawData - 2);
+//	for (size_t i = 0; i < _2flatsMinMaxPerSubspace.size(); i++)
+//	{
+//		_2flatsMinMaxPerSubspace[i].x = numeric_limits<float>::max();
+//		_2flatsMinMaxPerSubspace[i].y = -numeric_limits<float>::max();
+//	}
+//
+//	// Compute 1-flat and 2-flat for each and every item in pointCenterData
+//	ofstream ofDebug("neighborFitTest.txt");
+//	for (UINT64 i = 0; i < rawData.size(); i++)
+//	{
+//		// Just need to take the pointCenterData[i]
+//		vector<float> p1 = rawData[i];     // current point
+//		vector<float> p2 = (i == rawData.size() - 1) ? p1 : rawData[i + 1]; // next point
+//		// Assume linear connection between p1 and p2 now!
+//		// TODO: switch to quadratic connection
+//		XPCPSample xpcp_tuple(dim_rawData);
+//		calc_p_flats_fromTrajData(p1, p2, xpcp_tuple);
+//		Eigen::VectorXf tangent(p1.size());
+//		for (size_t j = 0; j < p1.size(); j++)
+//			tangent(j) = p2[j] - p1[j];
+//		g_xpcpData[i] = xpcp_tuple;
+//		g_majEigData[i] = tangent; // Set Eigen vector data
+//
+//
+//	}
+//	ofDebug.close();
+//	cout << "Number of entries in XPCP data: " << g_xpcpData.size() << endl;
+//	/////////////////////////////////////////////////////
+//	// !2 Sep 22, 2016: Added normalization func for p-flats 
+//	// Do normalization after we compute all p-flats!
+//	int normMethod = 0;
+//	nomralizePFlatsInSubspaces(g_xpcpData, normMethod);
+//	// Set g_1flat_list & g_2flat_list. Comment (!1) when we use normalization
+//	for (size_t i = 0; i < g_xpcpData.size(); i++)
+//	{
+//		vector<pFlatPt*> oneFlats;
+//		g_xpcpData[i].to_pFlatRec(oneFlats, 1, UINT64(i));
+//		// Add to global list
+//		g_1flat_list.insert(g_1flat_list.end(), oneFlats.begin(), oneFlats.end());
+//		vector<pFlatPt*> twoFlats;
+//		g_xpcpData[i].to_pFlatRec(twoFlats, 2, UINT64(i));
+//		// Add to global list
+//		//g_2flat_list.insert(g_2flat_list.end(), twoFlats.begin(), twoFlats.end());
+//	}
+//	////////////////////////////////////////////////
+//	// Remove duplicate records
+//	removeDuplicateRecords(rawData);
+//
+//	// Build KD trees for user query
+//	g_0flat_list.resize(g_unique_sampl_raw.size());
+//	for (size_t i = 0; i < g_unique_sampl_raw.size(); i++){
+//		g_0flat_list[i] = new zeroFlatPt(g_unique_sampl_raw[i]);
+//	}
+//	if (g_kdTree_rawData){
+//		g_kdTree_rawData->clear();
+//		g_kdTree_rawData = NULL;
+//	}
+//	g_kdTree_rawData = new KD<zeroFlatPt*>(dim_rawData);
+//	g_kdTree_rawData->buildBalanceTree(g_0flat_list);
+//
+//	// Build KD tree for 1Flat
+//	if (g_kdTree_1flat){
+//		g_kdTree_1flat->clear();
+//		g_kdTree_1flat = NULL;
+//	}
+//	g_kdTree_1flat = new KD<pFlatPt*>(2);
+//	g_kdTree_1flat->buildBalanceTree(g_1flat_list);
+//	//////////////////////////////////////////////////
+//	// TODO: Uncomment to write to file!
+//	//ofstream ofOneFlatKdTree("oneFlatKdtree.txt");
+//	//g_kdTree_1flat->printToFile(ofOneFlatKdTree);
+//	//ofOneFlatKdTree.close();
+//	//////////////////////////////////////////////////
+//	// Build KD tree for 2Flat
+//	if (g_kdTree_2flat){
+//		g_kdTree_2flat->clear();
+//		g_kdTree_2flat = NULL;
+//	}
+//	g_kdTree_2flat = new KD<pFlatPt*>(2);
+//	g_kdTree_2flat->buildBalanceTree(g_2flat_list);
+//	//////////////////////////////////////////////////
+//	// TODO: Uncomment to write to file!
+//	//ofstream ofTwoFlatKdTree("twoFlatKdtree.txt");
+//	//g_kdTree_2flat->printToFile(ofTwoFlatKdTree);
+//	//ofTwoFlatKdTree.close();
+//	/////////////////////////////////////////////////
+//}
 
 void XPCPdataAnalyzer::processRawDataInSubSpaces(const vector<vector<float>>& pointCenterData, int num_nearest_neighbors)
 {

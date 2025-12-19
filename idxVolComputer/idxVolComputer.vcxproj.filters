@@ -22,6 +22,9 @@
     <Filter Include="ANN\include">
       <UniqueIdentifier>{4c1b4435-4eac-4a1f-a91b-aadbb31b9dcf}</UniqueIdentifier>
     </Filter>
+    <Filter Include="outlier_detector">
+      <UniqueIdentifier>{0a5d46b6-9f59-4ce2-97f1-00fb709ed156}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -30,20 +33,8 @@
     <ClCompile Include="PCPInselberg.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="outtlier_dettector\iqsort.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="outtlier_dettector\qsp.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="outtlier_dettector\readCSV.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="XPCPdataAnalyzer.cpp">
       <Filter>main_features</Filter>
-    </ClCompile>
-    <ClCompile Include="PointMonteCarloSampler.cpp">
-      <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="VolumeData.cpp">
       <Filter>Source Files</Filter>
@@ -93,6 +84,24 @@
     <ClCompile Include="ANN\src\perf.cpp">
       <Filter>ANN</Filter>
     </ClCompile>
+    <ClCompile Include="outlier_detector\qsp.cpp">
+      <Filter>outlier_detector</Filter>
+    </ClCompile>
+    <ClCompile Include="outlier_detector\readCSV.c">
+      <Filter>outlier_detector</Filter>
+    </ClCompile>
+    <ClCompile Include="outlier_detector\iqsort.cpp">
+      <Filter>outlier_detector</Filter>
+    </ClCompile>
+    <ClCompile Include="global.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="PointDataHandler.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="PointMonteCarloSampler.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="UncertainXPCPSample.h">
@@ -128,23 +137,8 @@
     <ClInclude Include="PCPInselberg.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="outtlier_dettector\iqsort.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="outtlier_dettector\qsp.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="outtlier_dettector\readCSV.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="outtlier_dettector\stdlib2.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="XPCPdataAnalyzer.h">
       <Filter>main_features</Filter>
-    </ClInclude>
-    <ClInclude Include="PointMonteCarloSampler.h">
-      <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="VolumeData.h">
       <Filter>Header Files</Filter>
@@ -187,6 +181,36 @@
     </ClInclude>
     <ClInclude Include="ANN\include\ANN\ANNx.h">
       <Filter>ANN\include</Filter>
+    </ClInclude>
+    <ClInclude Include="BinNode.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="outlier_detector\qsp.h">
+      <Filter>outlier_detector</Filter>
+    </ClInclude>
+    <ClInclude Include="outlier_detector\readCSV.h">
+      <Filter>outlier_detector</Filter>
+    </ClInclude>
+    <ClInclude Include="outlier_detector\stdlib2.h">
+      <Filter>outlier_detector</Filter>
+    </ClInclude>
+    <ClInclude Include="outlier_detector\iqsort.h">
+      <Filter>outlier_detector</Filter>
+    </ClInclude>
+    <ClInclude Include="myProgDef.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Params.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="PointDataHandler.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="PointMonteCarloSampler.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Color.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

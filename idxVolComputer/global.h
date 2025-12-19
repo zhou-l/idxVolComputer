@@ -16,12 +16,12 @@ using std::ostream;
 #include "KDtree.h"
 #include "XPCPSample.h"
 #include "Eigen/Core"
-#include "MyAdvColor.h"
-#include "QGradientStops"
+//#include "MyAdvColor.h"
+//#include "QGradientStops"
 #include "myProgDef.h"
 #include "Params.h"
 //#include "VolRenParams.h"
-#include "RenderingParameters.h"
+//#include "RenderingParameters.h"
 //#include "Eigen/SVD"
 #ifdef M_PI
 #undef M_PI
@@ -242,12 +242,12 @@ extern NN_QUERY_METHOD g_nnQueryMethod; // the method for neighborhood query
 extern int            g_pcp_num_samples_skip_DS_LINE_MODE; // how many samples we skip when drawing the simplified pcp
 extern int            g_pcp_num_samples_skip_LINE_IDXPT_MODE; // how many samples to skip when drawing line+idx pt mode?
 extern double         g_pcp_downsample_max_log_val;
-// colormap variables
-extern std::vector<MyAdvColor>     g_cmColormap; // the current colormap as an global parameter
-extern std::vector<MyAdvColorNode> g_cmCtrlPoints; // control points for the colormap
+//// colormap variables
+//extern std::vector<MyAdvColor>     g_cmColormap; // the current colormap as an global parameter
+//extern std::vector<MyAdvColorNode> g_cmCtrlPoints; // control points for the colormap
 
-extern std::vector<QGradientStops>  g_cm_pcp_tfs; // base layer colormaps  
-extern std::vector<QGradientStops>  g_alpha_pcp_tfs; // base layer alpha maps
+//extern std::vector<QGradientStops>  g_cm_pcp_tfs; // base layer colormaps  
+//extern std::vector<QGradientStops>  g_alpha_pcp_tfs; // base layer alpha maps
 extern int                         g_cmColormapLen;
 extern COLOR_SCHEME g_visColorScheme;
 extern int          g_num_segCurve_halfdist;
@@ -256,7 +256,7 @@ extern bool            g_isHDR;
 extern double        g_boundScale; // the scaling factor at bounds
 extern Params        g_params;
 //extern VolRenParams  g_ext_rendering_parameters;
-extern RenderingParameters  g_ext_rendering_parameters;
+//extern RenderingParameters  g_ext_rendering_parameters;
 
 // the opengl colormap 1d texture
 extern unsigned int g_texCm1Did;

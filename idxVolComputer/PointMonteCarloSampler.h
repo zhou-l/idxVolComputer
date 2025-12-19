@@ -1,5 +1,5 @@
 #pragma once
-#include "DirectionalMonteCarloSampler.h"
+//#include "DirectionalMonteCarloSampler.h"
 #include "sampling.h"
 #include <QImage>
 #include "XPCPSample.h"

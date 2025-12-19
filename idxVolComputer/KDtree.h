@@ -4,7 +4,7 @@
 // Source code Copyright (C) 2007-2011 by Clifford A. Shaffer.
 #ifndef KDTREE_H
 #define KDTREE_H
-
+#include "global.h"
 #include "BSTNode.h"
 #include "book.h"
 #include <fstream>

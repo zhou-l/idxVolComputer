@@ -1,5 +1,5 @@
 #include "ParallelCoordinates.h"
-#include "opencv.hpp"
+//#include "opencv.hpp"
 using namespace std;
 
 ParallelCoordinates::ParallelCoordinates(const vector<string>& attributes):

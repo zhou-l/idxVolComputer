@@ -89,10 +89,10 @@ int                 g_pcp_num_samples_skip_LINE_IDXPT_MODE;
 int                 g_pcp_num_samples_skip_DS_LINE_MODE;
 double              g_pcp_downsample_max_log_val;
 
-std::vector<MyAdvColor>     g_cmColormap; // the current colormap as an global parameter
-std::vector<MyAdvColorNode> g_cmCtrlPoints; // control points for the colormap
-std::vector<QGradientStops> g_cm_pcp_tfs;// base layer COLOR 1D transfer functions 
-std::vector<QGradientStops> g_alpha_pcp_tfs; // base layer ALPHA 1D transfer functions
+//std::vector<MyAdvColor>     g_cmColormap; // the current colormap as an global parameter
+//std::vector<MyAdvColorNode> g_cmCtrlPoints; // control points for the colormap
+//std::vector<QGradientStops> g_cm_pcp_tfs;// base layer COLOR 1D transfer functions 
+//std::vector<QGradientStops> g_alpha_pcp_tfs; // base layer ALPHA 1D transfer functions
 bool                 g_isHDR;
 int                  g_cmColormapLen;
 int                  g_num_segCurve_halfdist; // number of segments of half the distance between two neighoring axes
@@ -100,7 +100,7 @@ COLOR_SCHEME         g_visColorScheme;
 double               g_boundScale; // the scaling factor at bounds
 Params               g_params;
 //VolRenParams         g_ext_rendering_parameters;
-RenderingParameters  g_ext_rendering_parameters;
+//RenderingParameters  g_ext_rendering_parameters;
 
 unsigned int g_texCm1Did;
 unsigned int g_texCM1DXform;
